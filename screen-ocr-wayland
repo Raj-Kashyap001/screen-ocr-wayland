@@ -39,13 +39,26 @@ if [ ! -f "$screenshot_file" ]; then
     exit 0
 fi
 
-# Run OCR on the screenshot
-tesseract "$screenshot_file" "${text_output_file%.txt}" -l eng
+# Enhance the image readability
+enhanced_screenshot_file="${screenshot_dir}/enhanced_screenshot.png"
+magick convert "$screenshot_file" -colorspace Gray -contrast-stretch 0 -sharpen 0x1 "$enhanced_screenshot_file"
+
+# Run OCR on the enhanced screenshot
+tesseract "$enhanced_screenshot_file" "${text_output_file%.txt}" -l eng
+
+# Check if the image contains text using Tesseract's `hocr` output
+hocr_output=$(tesseract "$enhanced_screenshot_file" stdout -l eng hocr)
+
+if ! grep -q "ocrx_word" <<< "$hocr_output"; then
+    notify "No text detected in the screenshot." "OCR Info"
+    rm "$screenshot_file" "$enhanced_screenshot_file"  # Clean up screenshot files
+    exit 0
+fi
 
 # Check if Tesseract produced any output
 if [ ! -s "$text_output_file" ]; then
     notify "Error: OCR failed or produced no output." "OCR Error"
-    rm "$screenshot_file"  # Clean up screenshot file
+    rm "$screenshot_file" "$enhanced_screenshot_file"  # Clean up screenshot files
     exit 1
 fi
 
@@ -53,8 +66,7 @@ fi
 wl-copy < "$text_output_file"
 
 # Clean up temporary files
-rm "$screenshot_file" "$text_output_file"
+rm "$screenshot_file" "$enhanced_screenshot_file" "$text_output_file"
 
 # Notify the user of success
 notify "Text from screenshot has been successfully copied to clipboard." "OCR Success"
-
